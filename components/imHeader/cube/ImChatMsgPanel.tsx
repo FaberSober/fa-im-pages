@@ -6,8 +6,8 @@ import { imConversationApi, imMessageApi } from '@features/fa-im-pages/services'
 import { Im, ImEnums } from '@features/fa-im-pages/types';
 import { Badge, Button, Dropdown, Empty, Input, Space, Splitter } from 'antd';
 import clsx from 'clsx';
-import { isNil, min } from 'lodash';
-import { ClipboardEvent, useContext, useEffect, useState } from 'react';
+import { isNil } from 'lodash';
+import { ClipboardEvent, useContext, useEffect, useRef, useState } from 'react';
 import useBus, { dispatch } from 'use-bus';
 import { formatConversationTime } from '../utils';
 import { formatChatTime } from './utils';
@@ -30,6 +30,7 @@ export default function ImChatMsgPanel() {
   const [pendingFiles, setPendingFiles] = useState<Array<{ file: File; type: ImEnums.ImMessageTypeEnum }>>([]);
   const [maxMsgId, setMaxMsgId] = useState<number>() // 本次加载最大的聊天记录ID
   const [hasNextPage, setHasNextPage] = useState(false) // 是否还有更早的聊天记录
+  const loadingPreMsgRef = useRef(false);
 
   // 监听消息列表变化，滚动到底部
   // 初始化滚动监听
@@ -75,10 +76,10 @@ export default function ImChatMsgPanel() {
     setConvSel(conv)
     // 查询消息列表
     imMessageApi.pageQuery({ query: { conversationId: conv.id }, pageSize: 40 }).then(res => {
-      res.data.rows.reverse()
-      setMsgList(res.data.rows.map(i => ({ ...i, sending: false })))
+      const rows = [...res.data.rows].reverse()
+      setMsgList(rows.map(i => ({ ...i, sending: false })))
       setHasNextPage(res.data.pagination.hasNextPage)
-      setMaxMsgId(min(res.data.rows.map(i => Number(i.id))))
+      setMaxMsgId(rows.length > 0 ? Number(rows[0].id) : undefined)
       FaUtils.scrollToBottomById('fa-im-chat-msg-container', 100)
     })
     // 更新消息未读数量
@@ -93,23 +94,25 @@ export default function ImChatMsgPanel() {
   /** 加载之前的聊天记录 */
   function loadPreMsg() {
     if (isNil(convSel)) return;
-    if (!hasNextPage) return;
+    if (!hasNextPage || loadingPreMsgRef.current || isNil(maxMsgId)) return;
 
     // 获取当前第一条消息的DOM元素和其位置信息
     const container = document.getElementById('fa-im-chat-msg-container');
     const firstMsg = msgList[0];
+    if (!firstMsg) return;
     const firstMsgElement = document.getElementById(`fa-msg-item-${firstMsg.id}`);
 
     if (!container || !firstMsgElement) return;
 
     // 记录第一条消息到容器顶部的距离
     const oldDistanceFromTop = firstMsgElement.offsetTop;
+    loadingPreMsgRef.current = true;
 
     imMessageApi.pageQuery({ query: { conversationId: convSel.id, maxMsgId }, pageSize: 40 }).then(res => {
-      res.data.rows.reverse();
-      setMsgList(prev => [ ...res.data.rows.map(i => ({ ...i, sending: false })), ...prev ]);
+      const rows = [...res.data.rows].reverse();
+      setMsgList(prev => [ ...rows.map(i => ({ ...i, sending: false })), ...prev ]);
       setHasNextPage(res.data.pagination.hasNextPage);
-      setMaxMsgId(min(res.data.rows.map(i => Number(i.id))));
+      setMaxMsgId(rows.length > 0 ? Number(rows[0].id) : undefined);
 
       // 在下一个渲染周期后调整滚动位置
       setTimeout(() => {
@@ -121,6 +124,8 @@ export default function ImChatMsgPanel() {
           container.scrollTop = scrollOffset;
         }
       }, 10);
+    }).finally(() => {
+      loadingPreMsgRef.current = false;
     });
   }
 
