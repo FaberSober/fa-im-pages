@@ -17,6 +17,21 @@ import ImChatMsg from './ImChatMsg';
 
 const { ImMessageTypeEnum } = ImEnums;
 
+type PendingFile = {
+  file: File;
+  type: ImEnums.ImMessageTypeEnum;
+};
+
+function getFileMessageType(file: File) {
+  if (FaUtils.isImageByFileName(file.name)) {
+    return ImEnums.ImMessageTypeEnum.IMAGE;
+  }
+  if (FaUtils.isVideoByFileName(file.name)) {
+    return ImEnums.ImMessageTypeEnum.VIDEO;
+  }
+  return ImEnums.ImMessageTypeEnum.FILE;
+}
+
 /**
  * @author xu.pengfei
  * @date 2025-09-08 14:18:22
@@ -27,7 +42,7 @@ export default function ImChatMsgPanel() {
   const [convSel, setConvSel] = useState<Im.ImConversationRetVo>();
   const [messageText, setMessageText] = useState<string>('');
   const [msgList, setMsgList] = useState<Im.ImMessageShow[]>([]);
-  const [pendingFiles, setPendingFiles] = useState<Array<{ file: File; type: ImEnums.ImMessageTypeEnum }>>([]);
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [maxMsgId, setMaxMsgId] = useState<number>() // 本次加载最大的聊天记录ID
   const [hasNextPage, setHasNextPage] = useState(false) // 是否还有更早的聊天记录
   const loadingPreMsgRef = useRef(false);
@@ -217,16 +232,18 @@ export default function ImChatMsgPanel() {
   }
 
   /** 发送文件消息 */
-  async function handleSendFileMsg() {
-    if (pendingFiles.length === 0 || !convSel) return;
+  async function handleSendFileMsg(files = pendingFiles, conversation = convSel) {
+    if (files.length === 0 || !conversation) return;
 
     // 清空输入框和待发送文件列表
     setMessageText('');
+    setPendingFiles([]);
 
     // 为每个文件创建临时消息并添加到消息列表
-    const tempMsgs = pendingFiles.map(pending => ({
+    const conversationId = conversation.id;
+    const tempMsgs = files.map(pending => ({
       id: FaUtils.uuid(),
-      conversationId: convSel.id,
+      conversationId,
       senderId: user.id,
       senderUserImg: user.img,
       type: pending.type,
@@ -238,21 +255,20 @@ export default function ImChatMsgPanel() {
       isWithdrawn: false,
       uploading: true,
       progress: 0,
-      uploadSuccess: false,
       sending: true,
     } as Im.ImMessageShow));
 
     setMsgList(prev => [...prev, ...tempMsgs]);
+    FaUtils.scrollToBottomById('fa-im-chat-msg-container', 100);
 
     // 并行上传所有文件
-    const filesToUpload = [...pendingFiles];
-    setPendingFiles([]); // 清空待发送列表
+    const filesToUpload = [...files];
 
     await Promise.all(tempMsgs.map(async (tempMsg, index) => {
       const pending = filesToUpload[index];
       try {
         const res = await fileSaveApi.uploadFile(pending.file, (progress: any) => {
-          const percent = Math.round((progress.loaded / progress.total) * 100);
+          const percent = progress.total > 0 ? Math.round((progress.loaded / progress.total) * 100) : 0;
           // 更新对应消息的上传进度
           setMsgList(prev => prev.map(msg =>
             msg.id === tempMsg.id
@@ -266,7 +282,7 @@ export default function ImChatMsgPanel() {
         }
         const fileInfo = res.data;
         const msgRes = await imConversationApi.sendMsg({
-          conversationId: convSel.id,
+          conversationId,
           type: pending.type,
           content: JSON.stringify({ fileId: fileInfo.id }),
         });
@@ -279,8 +295,9 @@ export default function ImChatMsgPanel() {
           msg.id === tempMsg.id
             ? {
                 ...msgRes.data,
+                content: msgRes.data.content || tempMsg.content,
+                fileId: msgRes.data.fileId || fileInfo.id,
                 uploading: false,
-                uploadSuccess: true,
                 sending: false,
               }
             : msg
@@ -314,7 +331,7 @@ export default function ImChatMsgPanel() {
 
   function handlePaste(e: ClipboardEvent<HTMLTextAreaElement>) {
     const items = e.clipboardData.items;
-    const fileItems = [];
+    const fileItems: PendingFile[] = [];
 
     let hasFile = false;
     for (let i = 0; i < items.length; i++) {
@@ -325,14 +342,7 @@ export default function ImChatMsgPanel() {
         const file = item.getAsFile();
         if (!file || !convSel) continue;
 
-        let type = ImEnums.ImMessageTypeEnum.FILE;
-        if (FaUtils.isImageByFileName(file.name)) {
-          type = ImEnums.ImMessageTypeEnum.IMAGE;
-        } else if (FaUtils.isVideoByFileName(file.name)) {
-          type = ImEnums.ImMessageTypeEnum.VIDEO;
-        }
-
-        fileItems.push({ file, type });
+        fileItems.push({ file, type: getFileMessageType(file) });
       }
     }
 
@@ -483,42 +493,11 @@ export default function ImChatMsgPanel() {
       if (!files || !convSel) return;
 
       // 遍历所有选中的文件
+      const fileItems: PendingFile[] = [];
       Array.from(files).forEach(file => {
-        let type = ImEnums.ImMessageTypeEnum.FILE
-        if (FaUtils.isImageByFileName(file.name)) {
-          type = ImEnums.ImMessageTypeEnum.IMAGE
-        } else if (FaUtils.isVideoByFileName(file.name)) {
-          type = ImEnums.ImMessageTypeEnum.VIDEO
-        }
-        // 先将文件上传到服务器
-        fileSaveApi.uploadFile(file, (progress: any) => {
-          const percent = (progress.loaded / progress.total * 100).toFixed(2);
-          console.log('上传进度:', percent + '%');
-        }).then((res: any) => {
-          if (res.status === 200 && res.data) {
-            const fileInfo = res.data;
-
-            // 上传成功后，发送消息
-            imConversationApi.sendMsg({
-              conversationId: convSel.id,
-              type,
-              content: JSON.stringify({ fileId: fileInfo.id }),
-            }).then(res => {
-              // 发送成功后清空输入框
-              if (res.status === 200) {
-                const msg = res.data;
-                setMsgList(prev => [
-                  ...prev,
-                  {
-                    ...msg,
-                    sending: false,
-                  }
-                ]);
-              }
-            });
-          }
-        });
+        fileItems.push({ file, type: getFileMessageType(file) });
       });
+      void handleSendFileMsg(fileItems, convSel);
     }
 
     // 触发文件选择框

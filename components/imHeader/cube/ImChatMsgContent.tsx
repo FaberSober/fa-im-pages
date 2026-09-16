@@ -9,7 +9,6 @@ export interface ImChatMsgContentProps {
   msg: Im.ImMessageShow & {
     uploading?: boolean;
     progress?: number;
-    uploadSuccess?: boolean;
   };
 }
 
@@ -26,11 +25,37 @@ export default function ImChatMsgContent({ msg }: ImChatMsgContentProps) {
       const fileId = msg.fileId || fileInfo.fileId;
       const fileName = fileInfo.fileName || '未命名文件';
       const ext = fileInfo.ext || '';
+      const uploadStatus = msg.uploading ? (
+        <div>
+          <div style={{ fontSize: 12 }} className="fa-text-grey">
+            上传中 {msg.progress ?? 0}%
+          </div>
+          <Progress percent={msg.progress ?? 0} size="small" />
+        </div>
+      ) : msg.error ? (
+        <div className="fa-text-error fa-im-wx-msg-text">{msg.error}</div>
+      ) : null;
+
       if (!fileId) {
-        throw new Error('缺少附件ID');
+        if (!msg.uploading && !msg.error) {
+          throw new Error('缺少附件ID');
+        }
+        return (
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <Space>
+              <FileOutlined style={{ fontSize: 24 }} />
+              <div>
+                <div>{fileName}</div>
+                <div className="fa-text-grey">{ext.toUpperCase()}文件</div>
+              </div>
+            </Space>
+            {uploadStatus}
+          </Space>
+        );
       }
       const previewUrl = fileSaveApi.genLocalGetFilePreview(fileId);
       const fileUrl = fileSaveApi.genLocalGetFile(fileId);
+      const fileReady = !msg.uploading;
 
       // 图片文件
       if (['png', 'jpg', 'jpeg', 'gif'].includes(ext.toLowerCase())) {
@@ -42,21 +67,13 @@ export default function ImChatMsgContent({ msg }: ImChatMsgContentProps) {
               placeholder={<Spin indicator={<LoadingOutlined spin />} size="small" />}
               preview={{ src: fileUrl }}
             />
-            {msg.uploading && (
-              <div>
-                <div style={{ fontSize: 12 }} className="fa-text-grey">
-                  上传中 {msg.progress}%
-                </div>
-                <Progress percent={msg.progress} size="small" />
-              </div>
-            )}
+            {uploadStatus}
           </div>
         );
       }
 
       // 视频文件
       if (['mp4', 'webm', 'ogg'].includes(ext.toLowerCase())) {
-        const previewUrl = fileSaveApi.genLocalGetFilePreview(fileId);
         return (
           <div className='fa-im-wx-msg-video' style={{ position: 'relative', cursor: 'pointer' }} onClick={() => window.open(fileUrl, '_blank')}>
             <video
@@ -68,21 +85,14 @@ export default function ImChatMsgContent({ msg }: ImChatMsgContentProps) {
               <source src={fileUrl} type={`video/${ext.toLowerCase()}`} />
               您的浏览器不支持 video 标签。
             </video>
-            {msg.uploading && (
-              <div>
-                <div style={{ fontSize: 12 }} className="fa-text-grey">
-                  上传中 {msg.progress}%
-                </div>
-                <Progress percent={msg.progress} size="small" />
-              </div>
-            )}
+            {uploadStatus}
           </div>
         );
       }
 
       // 其他类型文件
       return (
-        <div style={{ cursor: msg.uploadSuccess ? 'pointer' : 'default' }} onClick={() => msg.uploadSuccess && window.open(fileUrl, '_blank')}>
+        <div style={{ cursor: fileReady ? 'pointer' : 'default' }} onClick={() => fileReady && window.open(fileUrl, '_blank')}>
           <Space direction="vertical" style={{ width: '100%' }}>
             <Space>
               <FileOutlined style={{ fontSize: 24 }} />
@@ -91,14 +101,7 @@ export default function ImChatMsgContent({ msg }: ImChatMsgContentProps) {
                 <div className="fa-text-grey">{ext.toUpperCase()}文件</div>
               </div>
             </Space>
-            {msg.uploading && (
-              <div>
-                <div style={{ fontSize: 12 }} className="fa-text-grey">
-                  上传中 {msg.progress}%
-                </div>
-                <Progress percent={msg.progress} size="small" />
-              </div>
-            )}
+            {uploadStatus}
           </Space>
         </div>
       );
