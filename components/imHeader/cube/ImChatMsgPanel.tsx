@@ -249,12 +249,7 @@ export default function ImChatMsgPanel() {
           const msgRes = await imConversationApi.sendMsg({
             conversationId: convSel.id,
             type: pending.type,
-            content: JSON.stringify({
-              fileId: fileInfo.id,
-              fileName: fileInfo.originalFilename,
-              fileSize: fileInfo.size,
-              ext: fileInfo.ext,
-            }),
+            content: JSON.stringify({ fileId: fileInfo.id }),
           });
 
           if (msgRes.status === 200) {
@@ -474,12 +469,7 @@ export default function ImChatMsgPanel() {
             imConversationApi.sendMsg({
               conversationId: convSel.id,
               type,
-              content: JSON.stringify({
-                fileId: fileInfo.id,
-                fileName: fileInfo.originalFilename,
-                fileSize: fileInfo.size,
-                ext: fileInfo.ext,
-              }),
+              content: JSON.stringify({ fileId: fileInfo.id }),
             }).then(res => {
               // 发送成功后清空输入框
               if (res.status === 200) {

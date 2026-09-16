@@ -23,7 +23,12 @@ export default function ImChatMsgContent({ msg }: ImChatMsgContentProps) {
   if ([ImMessageTypeEnum.IMAGE, ImMessageTypeEnum.VIDEO, ImMessageTypeEnum.FILE].indexOf(msg.type) !== -1) {
     try {
       const fileInfo = JSON.parse(msg.content);
-      const { fileId, fileName, ext } = fileInfo;
+      const fileId = msg.fileId || fileInfo.fileId;
+      const fileName = fileInfo.fileName || '未命名文件';
+      const ext = fileInfo.ext || '';
+      if (!fileId) {
+        throw new Error('缺少附件ID');
+      }
       const previewUrl = fileSaveApi.genLocalGetFilePreview(fileId);
       const fileUrl = fileSaveApi.genLocalGetFile(fileId);
 
