@@ -24,15 +24,23 @@ export interface ImChatCoverProps {
 export default function ImChatCover({ conv }: ImChatCoverProps) {
   const {user} = useContext(UserLayoutContext)
 
-  let showImgs = useMemo(() => {
-    const coverJson = JSON.parse(conv.cover) as CoverItem[]
+  const showImgs = useMemo(() => {
+    let coverJson: CoverItem[] = [];
+    try {
+      const parsed = JSON.parse(conv.cover);
+      if (Array.isArray(parsed)) {
+        coverJson = parsed.filter((item): item is CoverItem => typeof item?.img === 'string' && item.img.length > 0);
+      }
+    } catch {
+      return [];
+    }
     if (conv.type === ImEnums.ImConversationTypeEnum.SINGLE) {
-      return coverJson.filter(i => i.id !== user.id).map(i => i.img)
+      return coverJson.filter(i => `${i.id}` !== `${user.id}`).map(i => i.img)
     } else {
       const imgs = coverJson.map(i => i.img);
       return imgs.slice(0, 9);
     }
-  }, [conv]);
+  }, [conv.cover, conv.type, user.id]);
 
   // console.log('showImgs', showImgs)
   // showImgs = [
@@ -41,10 +49,10 @@ export default function ImChatCover({ conv }: ImChatCoverProps) {
   //   '837b3d4dbe3c1176c501520d6208ffc6', 'cb4d172e00a22600d0206cbc26f4aed2',
   //   '837b3d4dbe3c1176c501520d6208ffc6', 'cb4d172e00a22600d0206cbc26f4aed2', 'cb4d172e00a22600d0206cbc26f4aed2',
   // ]
-  if (showImgs.length === 1) {
+  if (showImgs.length <= 1) {
     return (
       <div className='fa-im-wx-msg-header'>
-        <Avatar shape="square" src={<img src={fileSaveApi.genLocalGetFilePreview(showImgs[0])} />} size={36} />
+        <Avatar shape="square" src={showImgs[0] ? <img src={fileSaveApi.genLocalGetFilePreview(showImgs[0])} /> : undefined} size={36} />
       </div>
     )
   }

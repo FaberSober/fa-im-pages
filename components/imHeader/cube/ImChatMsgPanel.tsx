@@ -33,7 +33,7 @@ export default function ImChatMsgPanel() {
   const loadingPreMsgRef = useRef(false);
   const msgRequestSeqRef = useRef(0);
 
-  function updateConversation(data: Partial<Im.ImConversationRetVo> & { id: string }) {
+  function updateConversation(data: Partial<Im.ImConversationRetVo> & { id: string; updTime?: string }) {
     const conversationId = `${data.id}`;
     setConvList(prev => prev.map(item => `${item.id}` === conversationId ? { ...item, ...data } : item));
     setConvSel(prev => prev && `${prev.id}` === conversationId ? { ...prev, ...data } : prev);

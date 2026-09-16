@@ -7,7 +7,7 @@ import { imConversationApi } from '@features/fa-im-pages/services';
 import { Im, ImEnums } from '@features/fa-im-pages/types';
 import { Avatar, Button, Divider, Input, message, Modal, Tooltip } from 'antd';
 import { trim } from 'lodash';
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 
 export interface ImChatDetailProps {
   conv: Im.ImConversationRetVo;
@@ -30,6 +30,7 @@ export default function ImChatDetail({ conv, onCreateNewConv, onUpdateConv }: Im
   const [users, setUsers] = useState<Im.ImParticipant[]>([]);
   const [userTotal, setUserTotal] = useState(0);
   const [groupTitle, setGroupTitle] = useState(conv.title);
+  const participantsRequestSeqRef = useRef(0);
 
   const showUserNum = 15; // 如果普通用户，则展示15个，如果是群管理员，则展示14个用户
 
@@ -39,40 +40,58 @@ export default function ImChatDetail({ conv, onCreateNewConv, onUpdateConv }: Im
 
   useEffect(() => {
     setGroupTitle(conv.title)
+    setShowAll(false)
   }, [conv.id, conv.title]);
 
   function getParticipants() {
+    const requestSeq = ++participantsRequestSeqRef.current;
     imConversationApi.getParticipant({ query: { conversationId: conv.id }, pageSize: 999 }).then(res => {
-      setUsers(res.data.rows)
-      setUserTotal(res.data.pagination.total)
+      if (requestSeq !== participantsRequestSeqRef.current) return;
+      const rows = Array.isArray(res.data?.rows) ? res.data.rows.filter((item: Im.ImParticipant) => item?.userId) : [];
+      setUsers(rows)
+      setUserTotal(res.data?.pagination?.total ?? rows.length)
+    }).catch(() => {
+      if (requestSeq !== participantsRequestSeqRef.current) return;
+      setUsers([])
+      setUserTotal(0)
     })
   }
 
   /** 群聊添加用户 */
-  function handleAddUsers(users: SelectedUser[], callback: any, error: any) {
+  function handleAddUsers(users: SelectedUser[], callback: () => void, onError?: () => void) {
     // console.log('handleAddUsers', users)
     const userIds = users.map(i => i.id)
     // 如果是单聊，则创建一个新的群聊
-    if (conv.type == ImEnums.ImConversationTypeEnum.SINGLE) {
+    if (conv.type === ImEnums.ImConversationTypeEnum.SINGLE) {
       imConversationApi.createNewGroup({ userIds }).then(res => {
         FaUtils.showResponse(res, '创建群聊')
-        onCreateNewConv?.(res.data)
-        callback();
-        // 创建新的群聊成功，关闭聊天详情drawer，设置选中最新创建的聊天
-        closeDrawer?.();
-      }).catch(() => callback())
+        if (res.status === 200 && res.data) {
+          onCreateNewConv?.(res.data)
+          // 创建新的群聊成功，关闭聊天详情drawer，设置选中最新创建的聊天
+          closeDrawer?.();
+          callback();
+        } else {
+          onError?.();
+        }
+      }).catch(() => onError?.())
     } else {
       // 如果是群聊，则添加用户
       // 过滤已经加入的用户
       const inUserIds = getAllUsers().map(i => i.id);
       const addUserIds = userIds.filter(i => !inUserIds.includes(i))
+      if (addUserIds.length === 0) {
+        callback();
+        return;
+      }
       imConversationApi.addGroupUsers({ userIds: addUserIds, conversationId: conv.id }).then(res => {
         FaUtils.showResponse(res, '添加群聊用户')
-        onUpdateConv?.(res.data)
-        getParticipants()
-        callback();
-      }).catch(() => callback())
-      callback();
+        if (res.status === 200 && res.data) {
+          onUpdateConv?.(res.data)
+          callback();
+        } else {
+          onError?.();
+        }
+      }).catch(() => onError?.())
     }
   }
 
@@ -81,13 +100,17 @@ export default function ImChatDetail({ conv, onCreateNewConv, onUpdateConv }: Im
     const userIds = removeUserList.map(i => i.id)
     return imConversationApi.removeGroupUsers({ conversationId: conv.id, userIds }).then(res => {
       FaUtils.showResponse(res, '移出用户')
-      getParticipants()
-      onUpdateConv?.(res.data)
+      if (res.status === 200 && res.data) {
+        onUpdateConv?.(res.data)
+      } else {
+        throw new Error('移出群成员失败')
+      }
     })
   }
 
   function getShowUsers() {
-    return users.map(i => ({ id: i.userId, name: i.name, img: i.img }));
+    const showUsers = showAll ? users : users.slice(0, showUserNum);
+    return showUsers.map(i => ({ id: i.userId, name: i.name, img: i.img }));
   }
 
   function getAllUsers() {
@@ -172,13 +195,13 @@ export default function ImChatDetail({ conv, onCreateNewConv, onUpdateConv }: Im
 
         {userTotal > showUserNum && (
           <div className='fa-flex-center fa-full-w'>
-            <div onClick={handleToggleViewMore} style={{fontSize: '12px', padding: '2px 6px'}} className='fa-base-btn fa-radius'>
+            <Button type='text' onClick={handleToggleViewMore} aria-expanded={showAll} style={{fontSize: '12px', padding: '2px 6px'}} className='fa-base-btn fa-radius'>
               {showAll ? (
-                <div className='fa-flex-row-center'>收起<UpOutlined /></div>
+                <span className='fa-flex-row-center'>收起<UpOutlined /></span>
               ) : (
-                <div className='fa-flex-row-center'>查看更多<DownOutlined /></div>
+                <span className='fa-flex-row-center'>查看更多<DownOutlined /></span>
               )}
-            </div>
+            </Button>
           </div>
         )}
       </div>
