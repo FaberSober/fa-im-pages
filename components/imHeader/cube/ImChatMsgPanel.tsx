@@ -145,12 +145,12 @@ export default function ImChatMsgPanel() {
       content: messageText,
       isWithdrawn: false,
     }
-    setMsgList([
-      ...msgList,
+    setMsgList(prev => [
+      ...prev,
       {
         ...msgTmp,
-        sending: true
-      }
+        sending: true,
+      },
     ])
     FaUtils.scrollToBottomById('fa-im-chat-msg-container', 100)
 
@@ -183,24 +183,22 @@ export default function ImChatMsgPanel() {
       type: ImEnums.ImMessageTypeEnum.TEXT,
     }).then(res => {
       // 发送成功后更新会话列表
+      if (res.status !== 200 || !res.data) {
+        throw new Error('消息发送失败');
+      }
       console.log('发送成功:', res.data);
-      setMsgList([
-        ...msgList,
-        {
-          ...res.data,
-          sending: false,
-        }
-      ])
+      setMsgList(prev => prev.map(msg => msg.id === id ? {
+        ...res.data,
+        sending: false,
+      } : msg))
     }).catch(err => {
       console.log('发送失败:', err);
-      setMsgList([
-        ...msgList,
-        {
-          ...msgTmp,
-          sending: false,
-          error: '发送失败:' + err.message,
-        }
-      ])
+      const errorMessage = err instanceof Error ? err.message : '消息发送失败';
+      setMsgList(prev => prev.map(msg => msg.id === id ? {
+        ...msgTmp,
+        sending: false,
+        error: '发送失败:' + errorMessage,
+      } : msg))
     })
   }
 
@@ -227,7 +225,7 @@ export default function ImChatMsgPanel() {
       uploading: true,
       progress: 0,
       uploadSuccess: false,
-      sending: false,
+      sending: true,
     } as Im.ImMessageShow));
 
     setMsgList(prev => [...prev, ...tempMsgs]);
@@ -249,37 +247,41 @@ export default function ImChatMsgPanel() {
           ));
         });
 
-        if (res.status === 200 && res.data) {
-          const fileInfo = res.data;
-          const msgRes = await imConversationApi.sendMsg({
-            conversationId: convSel.id,
-            type: pending.type,
-            content: JSON.stringify({ fileId: fileInfo.id }),
-          });
-
-          if (msgRes.status === 200) {
-            // 用服务器返回的消息更新临时消息
-            setMsgList(prev => prev.map(msg =>
-              msg.id === tempMsg.id
-                ? {
-                    ...msgRes.data,
-                    uploading: false,
-                    uploadSuccess: true,
-                    sending: false,
-                  }
-                : msg
-            ));
-          }
+        if (res.status !== 200 || !res.data) {
+          throw new Error('文件上传失败');
         }
+        const fileInfo = res.data;
+        const msgRes = await imConversationApi.sendMsg({
+          conversationId: convSel.id,
+          type: pending.type,
+          content: JSON.stringify({ fileId: fileInfo.id }),
+        });
+        if (msgRes.status !== 200 || !msgRes.data) {
+          throw new Error('消息发送失败');
+        }
+
+        // 用服务器返回的消息更新临时消息
+        setMsgList(prev => prev.map(msg =>
+          msg.id === tempMsg.id
+            ? {
+                ...msgRes.data,
+                uploading: false,
+                uploadSuccess: true,
+                sending: false,
+              }
+            : msg
+        ));
       } catch (error) {
         console.error('文件上传或发送失败:', error);
+        const errorMessage = error instanceof Error ? error.message : '文件发送失败';
         // 更新消息状态为失败
         setMsgList(prev => prev.map(msg =>
           msg.id === tempMsg.id
             ? {
                 ...msg,
                 uploading: false,
-                error: '文件上传失败',
+                sending: false,
+                error: errorMessage,
               }
             : msg
         ));
