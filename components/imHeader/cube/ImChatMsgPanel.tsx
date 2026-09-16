@@ -31,6 +31,13 @@ export default function ImChatMsgPanel() {
   const [maxMsgId, setMaxMsgId] = useState<number>() // 本次加载最大的聊天记录ID
   const [hasNextPage, setHasNextPage] = useState(false) // 是否还有更早的聊天记录
   const loadingPreMsgRef = useRef(false);
+  const msgRequestSeqRef = useRef(0);
+
+  function updateConversation(data: Partial<Im.ImConversationRetVo> & { id: string }) {
+    const conversationId = `${data.id}`;
+    setConvList(prev => prev.map(item => `${item.id}` === conversationId ? { ...item, ...data } : item));
+    setConvSel(prev => prev && `${prev.id}` === conversationId ? { ...prev, ...data } : prev);
+  }
 
   // 监听消息列表变化，滚动到底部
   // 初始化滚动监听
@@ -72,10 +79,16 @@ export default function ImChatMsgPanel() {
   /** 点击聊天item */
   function handleClickConv(conv: Im.ImConversationRetVo) {
     if (isNil(conv)) return;
+    const requestSeq = ++msgRequestSeqRef.current;
+    loadingPreMsgRef.current = false;
     // 设置选中的聊天
     setConvSel(conv)
+    setMsgList([])
+    setHasNextPage(false)
+    setMaxMsgId(undefined)
     // 查询消息列表
     imMessageApi.pageQuery({ query: { conversationId: conv.id }, pageSize: 40 }).then(res => {
+      if (requestSeq !== msgRequestSeqRef.current) return;
       const rows = [...res.data.rows].reverse()
       setMsgList(rows.map(i => ({ ...i, sending: false })))
       setHasNextPage(res.data.pagination.hasNextPage)
@@ -85,7 +98,7 @@ export default function ImChatMsgPanel() {
     // 更新消息未读数量
     if (conv.unreadCount > 0) {
       imConversationApi.updateConversationRead({ conversationId: conv.id }).then(() => {
-        setConvList(prev => prev.map(i => i.id === conv.id ? { ...i, unreadCount: 0 } : i))
+        updateConversation({ id: conv.id, unreadCount: 0 })
         dispatch({ type: '@@api/IM_REFRESH_UNREAD_COUNT', payload: { } })
       })
     }
@@ -95,6 +108,8 @@ export default function ImChatMsgPanel() {
   function loadPreMsg() {
     if (isNil(convSel)) return;
     if (!hasNextPage || loadingPreMsgRef.current || isNil(maxMsgId)) return;
+    const requestSeq = msgRequestSeqRef.current;
+    const conversationId = convSel.id;
 
     // 获取当前第一条消息的DOM元素和其位置信息
     const container = document.getElementById('fa-im-chat-msg-container');
@@ -108,7 +123,8 @@ export default function ImChatMsgPanel() {
     const oldDistanceFromTop = firstMsgElement.offsetTop;
     loadingPreMsgRef.current = true;
 
-    imMessageApi.pageQuery({ query: { conversationId: convSel.id, maxMsgId }, pageSize: 40 }).then(res => {
+    imMessageApi.pageQuery({ query: { conversationId, maxMsgId }, pageSize: 40 }).then(res => {
+      if (requestSeq !== msgRequestSeqRef.current) return;
       const rows = [...res.data.rows].reverse();
       setMsgList(prev => [ ...rows.map(i => ({ ...i, sending: false })), ...prev ]);
       setHasNextPage(res.data.pagination.hasNextPage);
@@ -116,6 +132,7 @@ export default function ImChatMsgPanel() {
 
       // 在下一个渲染周期后调整滚动位置
       setTimeout(() => {
+        if (requestSeq !== msgRequestSeqRef.current) return;
         const newFirstMsgElement = document.getElementById(`fa-msg-item-${firstMsg.id}`);
         if (newFirstMsgElement && container) {
           // 计算新的滚动位置：新消息的高度 = 新位置 - 原来的位置
@@ -125,7 +142,9 @@ export default function ImChatMsgPanel() {
         }
       }, 10);
     }).finally(() => {
-      loadingPreMsgRef.current = false;
+      if (requestSeq === msgRequestSeqRef.current) {
+        loadingPreMsgRef.current = false;
+      }
     });
   }
 
@@ -155,30 +174,25 @@ export default function ImChatMsgPanel() {
     FaUtils.scrollToBottomById('fa-im-chat-msg-container', 100)
 
     // 更新聊天列表最新消息，同时将本聊天置顶
+    const conversationId = convSel.id;
+    updateConversation({
+      id: conversationId,
+      lastMsg: messageText,
+      updTime: FaUtils.getCurDateTime(),
+    });
     setConvList(prev => {
-      const newArr = prev.map(item => {
-        if (item.id === `${convSel.id}`) {
-          return {
-            ...item,
-            lastMsg: messageText,
-            updTime: FaUtils.getCurDateTime(),
-          }
-        }
-        return item
-      })
-      // 将data.conversationId移动到第一个位置
-      const targetIndex = newArr.findIndex(item => item.id === `${convSel.id}`);
-      if (targetIndex !== -1) {
-        const [targetItem] = newArr.splice(targetIndex, 1);
-        newArr.unshift(targetItem);
-      }
+      const targetIndex = prev.findIndex(item => `${item.id}` === `${conversationId}`);
+      if (targetIndex === -1) return prev;
+      const newArr = [...prev];
+      const [targetItem] = newArr.splice(targetIndex, 1);
+      newArr.unshift(targetItem);
       return newArr;
     })
 
     // 实现发送消息逻辑
-    console.log('发送消息:', messageText, '到会话:', convSel.id);
+    console.log('发送消息:', messageText, '到会话:', conversationId);
     imConversationApi.sendMsg({
-      conversationId: convSel.id,
+      conversationId,
       content: messageText,
       type: ImEnums.ImMessageTypeEnum.TEXT,
     }).then(res => {
@@ -442,18 +456,12 @@ export default function ImChatMsgPanel() {
       const data = payload as Im.ImConversationRetVo
       const conversationId = `${data.id}`;
       const hasConversation = convList.some(item => `${item.id}` === conversationId);
-      setConvList(prev => prev.map(item => `${item.id}` === conversationId ? {
-        ...item,
-        title: data.title ?? item.title,
-        userIds: data.userIds ?? item.userIds,
-        cover: data.cover ?? item.cover,
-      } : item))
-      setConvSel(prev => prev?.id === conversationId ? {
-        ...prev,
-        title: data.title ?? prev.title,
-        userIds: data.userIds ?? prev.userIds,
-        cover: data.cover ?? prev.cover,
-      } : prev)
+      updateConversation({
+        id: conversationId,
+        title: data.title,
+        userIds: data.userIds,
+        cover: data.cover,
+      })
       if (!hasConversation) {
         imConversationApi.listQuery({ conversationId }).then(res => {
           setConvList(prev => prev.some(item => `${item.id}` === conversationId) ? prev : [...res.data, ...prev])
@@ -573,7 +581,7 @@ export default function ImChatMsgPanel() {
             <div className='fa-im-wx-panel-right fa-flex-column'>
               {/* title */}
               <div className='fa-flex-row-center fa-p12 fa-border-b'>
-                <div>{convSel.convTitle}</div>
+                <div>{convSel.type === ImEnums.ImConversationTypeEnum.GROUP ? convSel.title : convSel.convTitle}</div>
                 <div className='fa-flex-1'></div>
                 <BaseDrawer
                   triggerDom={<Button type='text' icon={<EllipsisOutlined style={{fontSize: '24px'}} />}></Button>}
@@ -592,7 +600,7 @@ export default function ImChatMsgPanel() {
                       handleClickConv(newConv) // 选中刚创建的新聊天
                     }}
                     onUpdateConv={nc => {
-                      setConvList(prev => prev.map(i => i.id === nc.id ? { ...i, ...nc } : i))
+                      updateConversation(nc)
                     }}
                   />
                 </BaseDrawer>

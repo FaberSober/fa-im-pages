@@ -29,12 +29,17 @@ export default function ImChatDetail({ conv, onCreateNewConv, onUpdateConv }: Im
   const [showAll, setShowAll] = useState(false);
   const [users, setUsers] = useState<Im.ImParticipant[]>([]);
   const [userTotal, setUserTotal] = useState(0);
+  const [groupTitle, setGroupTitle] = useState(conv.title);
 
   const showUserNum = 15; // 如果普通用户，则展示15个，如果是群管理员，则展示14个用户
 
   useEffect(() => {
     getParticipants()
-  }, [conv]);
+  }, [conv.id, conv.userIds]);
+
+  useEffect(() => {
+    setGroupTitle(conv.title)
+  }, [conv.id, conv.title]);
 
   function getParticipants() {
     imConversationApi.getParticipant({ query: { conversationId: conv.id }, pageSize: 999 }).then(res => {
@@ -93,18 +98,26 @@ export default function ImChatDetail({ conv, onCreateNewConv, onUpdateConv }: Im
     setShowAll(!showAll)
   }
 
-  function handleRenameGroupTitle(title: any) {
-    if (trim(title) === '') {
+  function handleRenameGroupTitle(title: string) {
+    const nextTitle = trim(title);
+    if (nextTitle === '') {
+      setGroupTitle(conv.title)
       message.error('标题不可为空')
       return;
     }
-    if (trim(title).length > 100) {
+    if (nextTitle.length > 100) {
+      setGroupTitle(conv.title)
       message.error('标题长度不可超过100个字符')
       return;
     }
-    imConversationApi.renameGroup({ conversationId: conv.id, title: trim(title) }).then(res => {
+    imConversationApi.renameGroup({ conversationId: conv.id, title: nextTitle }).then(res => {
       FaUtils.showResponse(res, '重命名群聊')
-    })
+      if (res.status === 200 && res.data) {
+        onUpdateConv?.(res.data)
+      } else {
+        setGroupTitle(conv.title)
+      }
+    }).catch(() => setGroupTitle(conv.title))
   }
 
   function handleExitGroup() {
@@ -175,7 +188,7 @@ export default function ImChatDetail({ conv, onCreateNewConv, onUpdateConv }: Im
         <div className='fa-p12'>
           <div className='fa-mb6'>群聊名称</div>
           <div>
-            <Input defaultValue={conv.title} variant="filled" size='small'onBlur={(e) => handleRenameGroupTitle(e.target.value)} />
+            <Input value={groupTitle} onChange={e => setGroupTitle(e.target.value)} variant="filled" size='small'onBlur={(e) => handleRenameGroupTitle(e.target.value)} />
           </div>
         </div>
       )}
