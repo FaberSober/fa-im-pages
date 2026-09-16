@@ -438,7 +438,25 @@ export default function ImChatMsgPanel() {
     ({ type, payload }) => {
       console.log('callback', type, payload)
       const data = payload as Im.ImConversationRetVo
-      setConvList(prev => prev.map(item => `${item.id}` === `${data.id}` ? { ...item, ...data} : item))
+      const conversationId = `${data.id}`;
+      const hasConversation = convList.some(item => `${item.id}` === conversationId);
+      setConvList(prev => prev.map(item => `${item.id}` === conversationId ? {
+        ...item,
+        title: data.title ?? item.title,
+        userIds: data.userIds ?? item.userIds,
+        cover: data.cover ?? item.cover,
+      } : item))
+      setConvSel(prev => prev?.id === conversationId ? {
+        ...prev,
+        title: data.title ?? prev.title,
+        userIds: data.userIds ?? prev.userIds,
+        cover: data.cover ?? prev.cover,
+      } : prev)
+      if (!hasConversation) {
+        imConversationApi.listQuery({ conversationId }).then(res => {
+          setConvList(prev => prev.some(item => `${item.id}` === conversationId) ? prev : [...res.data, ...prev])
+        })
+      }
     },
     [convList],
   )
