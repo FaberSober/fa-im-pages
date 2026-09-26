@@ -14,6 +14,7 @@ import { formatChatTime } from './utils';
 import ImChatCover from './ImChatCover';
 import ImChatDetail from './ImChatDetail';
 import ImChatMsg from './ImChatMsg';
+import { appendPendingMessage, failPendingMessage, replacePendingMessage } from './message-state';
 
 const { ImMessageTypeEnum } = ImEnums;
 
@@ -179,13 +180,7 @@ export default function ImChatMsgPanel() {
       content: messageText,
       isWithdrawn: false,
     }
-    setMsgList(prev => [
-      ...prev,
-      {
-        ...msgTmp,
-        sending: true,
-      },
-    ])
+    setMsgList(prev => appendPendingMessage<Im.ImMessage>(prev, msgTmp))
     FaUtils.scrollToBottomById('fa-im-chat-msg-container', 100)
 
     // 更新聊天列表最新消息，同时将本聊天置顶
@@ -216,18 +211,11 @@ export default function ImChatMsgPanel() {
         throw new Error('消息发送失败');
       }
       console.log('发送成功:', res.data);
-      setMsgList(prev => prev.map(msg => msg.id === id ? {
-        ...res.data,
-        sending: false,
-      } : msg))
+      setMsgList(prev => replacePendingMessage<Im.ImMessage>(prev, id, res.data))
     }).catch(err => {
       console.log('发送失败:', err);
       const errorMessage = err instanceof Error ? err.message : '消息发送失败';
-      setMsgList(prev => prev.map(msg => msg.id === id ? {
-        ...msgTmp,
-        sending: false,
-        error: '发送失败:' + errorMessage,
-      } : msg))
+      setMsgList(prev => failPendingMessage<Im.ImMessage>(prev, id, msgTmp, errorMessage))
     })
   }
 
