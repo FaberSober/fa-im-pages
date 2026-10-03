@@ -6,6 +6,8 @@ import './ImHeaderCube.scss'
 import ImChatPanel from './cube/ImChatPanel';
 import { imConversationApi } from '@features/fa-im-pages/services';
 import useBus from 'use-bus';
+import type { Im } from '@features/fa-im-pages/types';
+import { notifyIncomingMessage } from './message-notification';
 
 
 /**
@@ -29,10 +31,12 @@ export default function ImHeaderCube() {
   // 接收消息
   useBus(
     ['@@ws/RECEIVE/IM'],
-    ({  }) => {
-      // 接收到消息，给出音效提醒
-      audioRef.current.play().catch(console.error);
-      getUnreadCount()
+    ({ payload }) => {
+      notifyIncomingMessage(
+        payload as Im.ImMessage | undefined,
+        () => { audioRef.current.play().catch(console.error); },
+        getUnreadCount,
+      );
     },
     [],
   )

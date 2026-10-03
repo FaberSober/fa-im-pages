@@ -43,6 +43,8 @@ namespace Im {
     // ------------- show cols -------------
     /** 发送用户头像 */
     senderUserImg: string;
+    /** 本次推送是否允许提醒；旧服务端缺省时正常提醒 */
+    notificationEnabled?: boolean;
   }
 
   export interface ImMessageShow extends ImMessage {
