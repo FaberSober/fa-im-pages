@@ -575,7 +575,7 @@ export default function ImChatMsgPanel() {
 
               {/* msg list panel */}
               <FaFlexRestLayout>
-                <Splitter layout="vertical">
+                <Splitter orientation="vertical">
                   {/* msg list */}
                   <Splitter.Panel>
                     <div className='fa-full fa-relative fa-flex-column'>

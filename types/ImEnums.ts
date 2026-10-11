@@ -11,7 +11,7 @@ namespace ImEnums {
 
   /**
    * 消息类型枚举
-   * 类型：1-文本/2-图片/3-视频/4-文件
+   * 类型：1-文本/2-图片/3-视频/4-文件/5-语音
    */
   export enum ImMessageTypeEnum {
     /** 文本 */
@@ -22,6 +22,8 @@ namespace ImEnums {
     VIDEO = 3,
     /** 文件 */
     FILE = 4,
+    /** 语音 */
+    VOICE = 5,
   }
 
   /**
@@ -32,6 +34,7 @@ namespace ImEnums {
     [ImMessageTypeEnum.IMAGE]: '图片',
     [ImMessageTypeEnum.VIDEO]: '视频',
     [ImMessageTypeEnum.FILE]: '文件',
+    [ImMessageTypeEnum.VOICE]: '语音',
   };
 
 }

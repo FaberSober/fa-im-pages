@@ -30,7 +30,7 @@ namespace Im {
     conversationId: string;
     /** 发送用户ID */
     senderId: string;
-    /** 类型：1-文本/2-图片/3-视频/4-文件 */
+    /** 类型：1-文本/2-图片/3-视频/4-文件/5-语音 */
     type: ImEnums.ImMessageTypeEnum;
     /** 消息内容 */
     content: string;

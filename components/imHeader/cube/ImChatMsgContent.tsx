@@ -1,4 +1,7 @@
 import { FileOutlined, LoadingOutlined } from '@ant-design/icons';
+import { FaUtils } from '@fa/ui';
+import { FilePreviewModal } from '@features/fa-admin-pages/components';
+import ImChatVoiceMessage from './ImChatVoiceMessage';
 import { fileSaveApi } from '@features/fa-admin-pages/services';
 import { Im, ImEnums } from '@features/fa-im-pages/types';
 import { Image, Progress, Space, Spin } from 'antd';
@@ -18,6 +21,19 @@ export interface ImChatMsgContentProps {
  * @date 2025-09-10 15:44
  */
 export default function ImChatMsgContent({ msg }: ImChatMsgContentProps) {
+  if (msg.type === ImMessageTypeEnum.VOICE) {
+    try {
+      const info = JSON.parse(msg.content);
+      const fileId = msg.fileId || info.fileId;
+      if (typeof fileId !== 'string' || !fileId.trim() || !Number.isInteger(info.duration) || info.duration < 1 || info.duration > 60) {
+        throw new Error('无效语音附件');
+      }
+      return <ImChatVoiceMessage key={`${msg.id}:${fileId}`} fileId={fileId} duration={info.duration} />;
+    } catch {
+      return <div className="fa-text-error fa-im-wx-msg-text">语音消息无法读取</div>;
+    }
+  }
+
   // 如果是文件类型（2-图片/3-视频/4-文件）
   if ([ImMessageTypeEnum.IMAGE, ImMessageTypeEnum.VIDEO, ImMessageTypeEnum.FILE].indexOf(msg.type) !== -1) {
     try {
@@ -41,7 +57,7 @@ export default function ImChatMsgContent({ msg }: ImChatMsgContentProps) {
           throw new Error('缺少附件ID');
         }
         return (
-          <Space direction="vertical" style={{ width: '100%' }}>
+          <Space orientation="vertical" style={{ width: '100%' }}>
             <Space>
               <FileOutlined style={{ fontSize: 24 }} />
               <div>
@@ -90,19 +106,22 @@ export default function ImChatMsgContent({ msg }: ImChatMsgContentProps) {
         );
       }
 
-      // 其他类型文件
+      // 默认在应用内预览，下载操作由共享预览页面提供。
+      const card = (
+        <button type="button" className="fa-im-wx-file-card" disabled={!fileReady || !!msg.error} title={fileName}>
+          <span className="fa-im-wx-file-icon"><FileOutlined /><span>{ext.toUpperCase() || 'FILE'}</span></span>
+          <span className="fa-im-wx-file-info">
+            <span className="fa-im-wx-file-name">{fileName}</span>
+            <span className="fa-im-wx-attachment-meta">
+              {ext.toUpperCase() || '文件'}{typeof fileInfo.fileSize === 'number' ? ` · ${FaUtils.sizeToHuman(fileInfo.fileSize)}` : ''}
+            </span>
+          </span>
+        </button>
+      );
       return (
-        <div style={{ cursor: fileReady ? 'pointer' : 'default' }} onClick={() => fileReady && window.open(fileUrl, '_blank')}>
-          <Space direction="vertical" style={{ width: '100%' }}>
-            <Space>
-              <FileOutlined style={{ fontSize: 24 }} />
-              <div>
-                <div>{fileName}</div>
-                <div className="fa-text-grey">{ext.toUpperCase()}文件</div>
-              </div>
-            </Space>
-            {uploadStatus}
-          </Space>
+        <div>
+          {fileReady && !msg.error ? <FilePreviewModal fileId={fileId} title={fileName} trigger={card} /> : card}
+          {uploadStatus}
         </div>
       );
     } catch (e) {
