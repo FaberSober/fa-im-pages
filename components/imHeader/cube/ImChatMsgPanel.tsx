@@ -14,6 +14,7 @@ import { formatChatTime } from './utils';
 import ImChatCover from './ImChatCover';
 import ImChatDetail from './ImChatDetail';
 import ImChatMsg from './ImChatMsg';
+import { formatMessageSummary } from './message-summary';
 import { appendPendingMessage, failPendingMessage, replacePendingMessage } from './message-state';
 
 const { ImMessageTypeEnum } = ImEnums;
@@ -187,7 +188,7 @@ export default function ImChatMsgPanel() {
     const conversationId = convSel.id;
     updateConversation({
       id: conversationId,
-      lastMsg: messageText,
+      lastMsg: formatMessageSummary(msgTmp, user.name),
       updTime: FaUtils.getCurDateTime(),
     });
     setConvList(prev => {
@@ -278,6 +279,12 @@ export default function ImChatMsgPanel() {
           throw new Error('消息发送失败');
         }
 
+        updateConversation({
+          id: conversationId,
+          lastMsg: formatMessageSummary(msgRes.data, user.name),
+          updTime: FaUtils.getCurDateTime(),
+        });
+
         // 用服务器返回的消息更新临时消息
         setMsgList(prev => prev.map(msg =>
           msg.id === tempMsg.id
@@ -359,17 +366,9 @@ export default function ImChatMsgPanel() {
             if (item.id === `${data.conversationId}`) {
               // 如果是当前打开的聊天窗口，则设置未读消息数量为0
               const unreadCount = item.id === convSel?.id ? 0 : item.unreadCount + 1
-              let content = data.content;
-              if (data.type === ImMessageTypeEnum.IMAGE) {
-                content = '图片'
-              } else if (data.type === ImMessageTypeEnum.VIDEO) {
-                content = '视频'
-              } else if (data.type === ImMessageTypeEnum.FILE) {
-                content = '文件'
-              }
               return {
                 ...item,
-                lastMsg: data.crtName + ":" + content,
+                lastMsg: formatMessageSummary(data, data.crtName),
                 unreadCount,
                 updTime: FaUtils.getCurDateTime(),
               }
@@ -526,7 +525,7 @@ export default function ImChatMsgPanel() {
                   <Badge size="small" count={conv.unreadCount}>
                     <ImChatCover conv={conv} />
                   </Badge>
-                  <div className='fa-ml12 fa-flex-1'>
+                  <div className='fa-ml12 fa-flex-1 fa-im-wx-conv-item-content'>
                     <div className='fa-flex-row-center'>
                       <div className='fa-flex-1 fa-word-ellipse fa-im-wx-conv-item-title'>{conv.type === ImEnums.ImConversationTypeEnum.GROUP ? conv.title : conv.convTitle}</div>
                       {/* 最后更新时间：如果是今天，则展示HH:mm；如果是最近7天，则展示星期几；如果超过7天但是同一年的，则展示MM-DD；如果超过7天且不是同一年，则展示YYYY-MM-DD  */}
